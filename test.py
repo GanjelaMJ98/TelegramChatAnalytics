@@ -3,15 +3,95 @@ from wordcloud import WordCloud, STOPWORDS
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
+import seaborn as sns
 import string
 import re
+from collections import Counter
 
 
-messages = pd.read_json(r"result.json")
+messages_orig = pd.read_json(r"final.json")
+messages = pd.DataFrame(messages_orig.messages.to_list())
+messages['sender'] = messages['from'].apply(lambda x: 'Anna' if x == 'Анюта' else 'Pavel')
+##########################################################
+# Message type analize
+messages_df = messages
+p_mes = messages_df[messages_df.sender == 'Pavel']
+a_mes = messages_df[messages_df.sender == 'Anna']
+
+#photo
+a_mes[a_mes.photo == a_mes.photo].shape[0]
+p_mes[p_mes.photo == p_mes.photo].shape[0]
+w = pd.pivot_table(messages_df, columns='width',values ='id',aggfunc='count').transpose().reset_index()
+h = pd.pivot_table(messages_df, columns='height',values ='id',aggfunc='count').transpose().reset_index()
+print(f'Popular size: {int(h[h.id == h.id.max()].height.values[0])}x{int(w[w.id == w.id.max()].width.values[0])}')
+
+
+#video
+a_mes[a_mes.media_type == 'video_file'].shape[0]
+p_mes[p_mes.media_type == 'video_file'].shape[0]
+a_mes[a_mes.media_type == 'video_file'].duration_seconds.mean()
+p_mes[p_mes.media_type == 'video_file'].duration_seconds.mean()
+
+
+#voice_message
+a_mes[a_mes.media_type == 'voice_message'].shape[0]
+p_mes[p_mes.media_type == 'voice_message'].shape[0]
+# 2020-04-15T14:40:11 
+a_mes[a_mes.media_type == 'voice_message'].duration_seconds.max()
+a_mes[a_mes.media_type == 'voice_message'].duration_seconds.mean()
+p_mes[p_mes.media_type == 'voice_message'].duration_seconds.max()
+p_mes[p_mes.media_type == 'voice_message'].duration_seconds.mean()
+
+#video_message
+a_mes[a_mes.media_type == 'video_message'].shape[0]
+p_mes[p_mes.media_type == 'video_message'].shape[0]
+a_mes[a_mes.media_type == 'video_message'].duration_seconds.mean()
+p_mes[p_mes.media_type == 'video_message'].duration_seconds.mean()
+
+#sticker
+a_mes[a_mes.media_type == 'sticker'].shape[0]
+p_mes[p_mes.media_type == 'sticker'].shape[0]
+
+#animation
+a_mes[a_mes.media_type == 'animation'].shape[0] 
+p_mes[p_mes.media_type == 'animation'].shape[0]
+
+#audio_file
+a_mes[a_mes.media_type == 'audio_file'].shape[0]
+p_mes[p_mes.media_type == 'audio_file'].shape[0]
+
+#audio_file
+a_mes[a_mes.edited == a_mes.edited].shape[0]
+p_mes[p_mes.edited == p_mes.edited].shape[0]
+
+#emoji
+e_a = pd.pivot_table(a_mes, columns='sticker_emoji',values ='id',aggfunc='count').transpose().reset_index()
+e_a = e_a.sort_values('id',ascending=False).head(5).sticker_emoji.to_list()
+e_p = pd.pivot_table(p_mes, columns='sticker_emoji',values ='id',aggfunc='count').transpose().reset_index()
+e_p = e_p.sort_values('id',ascending=False).head(5).sticker_emoji.to_list()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+##########################################################
 
 messages = messages[['id', 'date', 'from','text']]
-messages['sender'] = messages['from'].apply(lambda x: 'Anna' if x == 'Анюта' else 'Pavel')
-messages = messages[['id', 'date', 'sender','text']]
+#messages = messages[['id', 'date', 'sender','text']]
+messages['date'] = pd.to_datetime(messages['date'])
+
 print(f'''
 MIN DATE all message: {messages.date.min()}
 MAX DATE all message: {messages.date.max()}''')
@@ -37,22 +117,48 @@ Anna mean message: {anna_mean} {round(anna_mean/(anna_mean+pavel_mean)*100,1)}%
 Pasha mean message: {pavel_mean} {round(pavel_mean/(anna_mean+pavel_mean)*100,1)}%''')
 
 
-#Messages
-messages_count = plt.figure();
-ax = messages_count.add_axes([0,0,1,1])
-ax.set_xticks(np.arange(0, 150, 10))
-ax.plot(piv_count_messages_day['Anna'], piv_count_messages_day['day'])
-ax.plot(piv_count_messages_day['Pavel'], piv_count_messages_day['day'])
-ax.legend(['Anna','Pavel']);
+
+piv_count_messages_date = pd.pivot_table(messages, index = 'date',columns = 'sender', values = 'id',aggfunc='count')
+piv_count_messages_date = piv_count_messages_date.reset_index()
+piv_count_messages_date['hour'] = piv_count_messages_date['date'].apply(lambda x : x.hour)
+
+
+utro = piv_count_messages_date[(piv_count_messages_date['hour'] >= 7) & (piv_count_messages_date['hour'] <= 11)]
+den = piv_count_messages_date[(piv_count_messages_date['hour'] >= 12) & (piv_count_messages_date['hour'] <= 16)]
+vecher = piv_count_messages_date[(piv_count_messages_date['hour'] >= 17) & (piv_count_messages_date['hour'] <= 22)]
+noch = piv_count_messages_date[(piv_count_messages_date['hour'] >= 23) | (piv_count_messages_date['hour'] <= 6)]
+
+df_per_day = piv_count_messages_date[['hour','Anna','Pavel']].melt('hour', var_name='cols',  value_name='vals')
+df_per_day['time'] = df_per_day['hour'].apply(lambda x: 'morning' if x >= 7 and x <=11 
+                                                        else 'daytime' if x >=12 and x <=16
+                                                        else 'evening' if x >=17 and x <=22
+                                                        else 'night' if x >= 23 or x <= 6
+                                                        else 'lol')
+df_per_day1 = df_per_day.dropna()
+f, ax = plt.subplots(figsize=(20, 10))
+sns.set(font_scale=1.3)
+per_day = sns.countplot(data = df_per_day1,
+            x = 'time',hue='cols',
+            palette=["#ffb1c6",'#45c6ef'], orient ='h',
+            )
+per_day.get_figure().savefig('OUT/per_day.png')
+
+
+
+
+
 
 
 df = piv_count_messages_day[['day','Anna','Pavel']].melt('day', var_name='cols',  value_name='vals')
+df['year'] = df['day'].apply(lambda x : str(x)[:4])
 
-import seaborn as sns
+
 sns.set(style="whitegrid")
 sns.set(font_scale=1.2)
-sns.relplot(
-    data=df,
+fig, ax = plt.subplots()
+fig.set_size_inches(18.5, 10.5)
+y_2019 = sns.relplot(
+    data=df[df.year == '2019'],
     x="day", y="vals", hue= 'cols',
     kind="line",
     palette=["#ffb1c6",'#45c6ef'],
@@ -62,6 +168,33 @@ sns.relplot(
     ylabel="count",
     xlabel='date'
 )
+y_2019.fig.savefig('OUT/2019.png')
+
+y_2020 = sns.relplot(
+    data=df[df.year == '2020'],
+    x="day", y="vals", hue= 'cols',
+    kind="line",
+    palette=["#ffb1c6",'#45c6ef'],
+    height=5, aspect=2, linewidth = 3
+).set(
+    title="Stock Prices",
+    ylabel="count",
+    xlabel='date'
+)
+y_2020.fig.savefig('OUT/2020.png')
+
+y_2021 = sns.relplot(
+    data=df[df.year == '2021'],
+    x="day", y="vals", hue= 'cols',
+    kind="line",
+    palette=["#ffb1c6",'#45c6ef'],
+    height=5, aspect=2, linewidth = 3
+).set(
+    title="Stock Prices",
+    ylabel="count",
+    xlabel='date'
+)
+y_2021.fig.savefig('OUT/2021.png')
 
 
 
@@ -172,7 +305,7 @@ piv_love['Pavel_proc'] = piv_love.apply(lambda x : 100 - x.Anna_proc ,axis=1)
 
 from tabulate import tabulate
 print(tabulate(piv_love, headers='keys', tablefmt='psql'))
-
+piv_love.to_excel(r'OUT/tags_search.xlsx')
 
 
 
@@ -207,7 +340,7 @@ mat_words_clear_gen = ' '.join(mat_words_clear)
 
 wordcloud_mat = WordCloud(width = 1920, height = 1080,
                 background_color ='white',
-                max_words=300,
+                max_words=200,
                 min_font_size = 10).generate(mat_words_clear_gen)
 plt.figure(figsize = (8, 8), facecolor = None)
 plt.imshow(wordcloud_mat)
@@ -215,6 +348,7 @@ plt.axis("off")
 plt.tight_layout(pad = 0)
 #wordcloud_mat.to_file('wordcloud_mat.png')
 plt.show()
+wordcloud_mat.to_file(r'OUT/wordcloud_mat1.png',)
 
 
 
@@ -233,11 +367,15 @@ all_words = all_words.translate(str.maketrans('', '', string.punctuation))
 all_words = ' '.join(set(all_words.split(' ')) - set(mat_words_clear))
 
 
+#custom
+all_words = all_words.replace('nn','')
+all_words = all_words.replace('n','')
+
 wordcloud = WordCloud(width = 1920, height = 1080,
                 background_color ='white',
                 stopwords=russian_stopwords,
                 max_words=500,
-                mask = mask,
+                #mask = mask,
                 min_font_size = 10).generate(all_words)
 
 # plot the WordCloud image
@@ -247,4 +385,5 @@ plt.axis("off")
 plt.tight_layout(pad = 0)
 
 plt.show()
-wordcloud.to_file('lol1.png')
+wordcloud.to_file('lol.png')
+wordcloud_mat.to_file(r'OUT/wordcloud1.png',)

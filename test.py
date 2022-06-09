@@ -1,95 +1,68 @@
 # coding: utf-8
 from wordcloud import WordCloud, STOPWORDS
 import matplotlib.pyplot as plt
+from collections import Counter
 import pandas as pd
 import numpy as np
 import seaborn as sns
 import string
 import re
-from collections import Counter
 
 
 messages_orig = pd.read_json(r"final.json")
 messages = pd.DataFrame(messages_orig.messages.to_list())
 messages['sender'] = messages['from'].apply(lambda x: 'Anna' if x == 'Анюта' else 'Pavel')
 ##########################################################
+
 # Message type analize
 messages_df = messages
-p_mes = messages_df[messages_df.sender == 'Pavel']
-a_mes = messages_df[messages_df.sender == 'Anna']
 
-#photo
-a_mes[a_mes.photo == a_mes.photo].shape[0]
-p_mes[p_mes.photo == p_mes.photo].shape[0]
+
+type_analize = pd.DataFrame()
+index = 0
+for sender in ['Anna', 'Pavel']:
+    sender_mes = messages_df[messages_df.sender == sender]
+    emoji = pd.pivot_table(sender_mes, columns='sticker_emoji',values ='id',aggfunc='count').transpose().reset_index()
+    emoji = emoji.sort_values('id',ascending=False).head(5).sticker_emoji.to_list()
+    data = {
+        'sender' : sender,
+        'photo_cnt' : sender_mes[sender_mes.photo == sender_mes.photo].shape[0],
+        'video_cnt' : sender_mes[sender_mes.media_type == 'video_file'].shape[0],
+        'video_dur_max' : sender_mes[sender_mes.media_type == 'video_file'].duration_seconds.mean(),
+        'video_dur_mean' : sender_mes[sender_mes.media_type == 'video_file'].duration_seconds.max(),
+        'voice_message' : sender_mes[sender_mes.media_type == 'voice_message'].shape[0],
+        'voice_dur_mean' : sender_mes[sender_mes.media_type == 'voice_message'].duration_seconds.mean(),
+        'voice_dur_max' : sender_mes[sender_mes.media_type == 'voice_message'].duration_seconds.max(),
+        'video_message' : sender_mes[sender_mes.media_type == 'video_message'].shape[0],
+        'video_message_dur_mean' : sender_mes[sender_mes.media_type == 'video_message'].duration_seconds.mean(),
+        'sticker' : sender_mes[sender_mes.media_type == 'sticker'].shape[0],
+        'animation' : sender_mes[sender_mes.media_type == 'animation'].shape[0] ,
+        'audio_file' : sender_mes[sender_mes.media_type == 'audio_file'].shape[0] ,
+        'edited' : sender_mes[sender_mes.edited == sender_mes.edited].shape[0],
+        'emoji' : str(emoji),
+    }
+    d = pd.DataFrame(data,index = [index])
+    index +=1
+    type_analize = type_analize.append(d)
+
+type_analize = type_analize.transpose()
+type_analize.columns = type_analize.loc['sender']
+type_analize['a_proc'] = type_analize.apply(lambda x : round((x.Anna/(x.Anna + x.Pavel) )*100,1) if type(x.Anna) != str else 0,axis=1)
+type_analize['Pavel_proc'] = type_analize.apply(lambda x : 100 - x.a_proc ,axis=1)
+type_analize.to_excel('OUT/type_analize.xlsx')
+
+
 w = pd.pivot_table(messages_df, columns='width',values ='id',aggfunc='count').transpose().reset_index()
 h = pd.pivot_table(messages_df, columns='height',values ='id',aggfunc='count').transpose().reset_index()
 print(f'Popular size: {int(h[h.id == h.id.max()].height.values[0])}x{int(w[w.id == w.id.max()].width.values[0])}')
-
-
-#video
-a_mes[a_mes.media_type == 'video_file'].shape[0]
-p_mes[p_mes.media_type == 'video_file'].shape[0]
-a_mes[a_mes.media_type == 'video_file'].duration_seconds.mean()
-p_mes[p_mes.media_type == 'video_file'].duration_seconds.mean()
-
-
-#voice_message
-a_mes[a_mes.media_type == 'voice_message'].shape[0]
-p_mes[p_mes.media_type == 'voice_message'].shape[0]
-# 2020-04-15T14:40:11 
-a_mes[a_mes.media_type == 'voice_message'].duration_seconds.max()
-a_mes[a_mes.media_type == 'voice_message'].duration_seconds.mean()
-p_mes[p_mes.media_type == 'voice_message'].duration_seconds.max()
-p_mes[p_mes.media_type == 'voice_message'].duration_seconds.mean()
-
-#video_message
-a_mes[a_mes.media_type == 'video_message'].shape[0]
-p_mes[p_mes.media_type == 'video_message'].shape[0]
-a_mes[a_mes.media_type == 'video_message'].duration_seconds.mean()
-p_mes[p_mes.media_type == 'video_message'].duration_seconds.mean()
-
-#sticker
-a_mes[a_mes.media_type == 'sticker'].shape[0]
-p_mes[p_mes.media_type == 'sticker'].shape[0]
-
-#animation
-a_mes[a_mes.media_type == 'animation'].shape[0] 
-p_mes[p_mes.media_type == 'animation'].shape[0]
-
-#audio_file
-a_mes[a_mes.media_type == 'audio_file'].shape[0]
-p_mes[p_mes.media_type == 'audio_file'].shape[0]
-
-#audio_file
-a_mes[a_mes.edited == a_mes.edited].shape[0]
-p_mes[p_mes.edited == p_mes.edited].shape[0]
-
-#emoji
-e_a = pd.pivot_table(a_mes, columns='sticker_emoji',values ='id',aggfunc='count').transpose().reset_index()
-e_a = e_a.sort_values('id',ascending=False).head(5).sticker_emoji.to_list()
-e_p = pd.pivot_table(p_mes, columns='sticker_emoji',values ='id',aggfunc='count').transpose().reset_index()
-e_p = e_p.sort_values('id',ascending=False).head(5).sticker_emoji.to_list()
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
 
 ##########################################################
 
-messages = messages[['id', 'date', 'from','text']]
-#messages = messages[['id', 'date', 'sender','text']]
+#messages = messages[['id', 'date', 'from','text']]
+messages = messages[['id', 'date', 'sender','text']]
 messages['date'] = pd.to_datetime(messages['date'])
 
 print(f'''
@@ -199,21 +172,6 @@ y_2021.fig.savefig('OUT/2021.png')
 
 
 
-#Count
-# fig = plt.figure()
-# fig1 = plt.figure()
-# ax = fig.add_axes([1,1,0.3,1])
-# ax_mean = fig1.add_axes([1,1,0.3,1])
-# langs = ['Anna', 'Pavel']
-# students = [anna_count,pavel_count]
-# ax.bar('Anna',anna_count,color = 'red')
-# ax.bar('Pavel',pavel_count,color = 'blue')
-# ax_mean.bar('Anna',anna_mean,color = 'red')
-# ax_mean.bar('Pavel',pavel_mean,color = 'blue')
-# plt.show()
-
-
-
 # tags
 tags = pd.read_excel(r'tags.xlsx')
 
@@ -283,8 +241,7 @@ messages['youtube'] = messages['text'].apply(lambda x: bool(youtube_compile.sear
 messages['mat'] = messages['text'].apply(lambda x: bool(mat_tags.search(x)))
 
 
-#net = messages[messages.mat == False]
-#est = messages[messages.mat]
+
 messages[(messages.love) & (messages.sender == 'Pavel')].shape[0]
 messages[(messages.love) & (messages.sender == 'Anna')].shape[0]
 messages[(messages.ans) & (messages.sender == 'Pavel')].shape[0]
@@ -311,18 +268,14 @@ piv_love.to_excel(r'OUT/tags_search.xlsx')
 
 #--------#
 import nltk
-nltk.download("stopwords")
-from nltk.corpus import stopwords
 from PIL import Image
+from nltk.corpus import stopwords
 
 mask = np.array(Image.open('cloud1.png'))
+nltk.download("stopwords")
 
 russian_stopwords = stopwords.words("russian")
 russian_stopwords.extend(['это','link\'','text\'','type\''])
-
-
-
-
 
 
 
@@ -340,7 +293,7 @@ mat_words_clear_gen = ' '.join(mat_words_clear)
 
 wordcloud_mat = WordCloud(width = 1920, height = 1080,
                 background_color ='white',
-                max_words=200,
+                max_words=500,
                 min_font_size = 10).generate(mat_words_clear_gen)
 plt.figure(figsize = (8, 8), facecolor = None)
 plt.imshow(wordcloud_mat)
@@ -348,7 +301,7 @@ plt.axis("off")
 plt.tight_layout(pad = 0)
 #wordcloud_mat.to_file('wordcloud_mat.png')
 plt.show()
-wordcloud_mat.to_file(r'OUT/wordcloud_mat1.png',)
+
 
 
 
@@ -385,5 +338,5 @@ plt.axis("off")
 plt.tight_layout(pad = 0)
 
 plt.show()
-wordcloud.to_file('lol.png')
-wordcloud_mat.to_file(r'OUT/wordcloud1.png',)
+wordcloud.to_file('OUT/wordcloud_orig.png')
+wordcloud_mat.to_file(r'OUT/wordcloud_mat.png',)

@@ -9,15 +9,13 @@ import string
 import re
 
 
-messages_orig = pd.read_json(r"final.json")
+messages_orig = pd.read_json(r"result.json")
 messages = pd.DataFrame(messages_orig.messages.to_list())
 messages['sender'] = messages['from'].apply(lambda x: 'Anna' if x == 'Анюта' else 'Pavel')
 ##########################################################
 
 # Message type analize
 messages_df = messages
-
-
 type_analize = pd.DataFrame()
 index = 0
 for sender in ['Anna', 'Pavel']:
@@ -49,19 +47,18 @@ type_analize = type_analize.transpose()
 type_analize.columns = type_analize.loc['sender']
 type_analize['a_proc'] = type_analize.apply(lambda x : round((x.Anna/(x.Anna + x.Pavel) )*100,1) if type(x.Anna) != str else 0,axis=1)
 type_analize['Pavel_proc'] = type_analize.apply(lambda x : 100 - x.a_proc ,axis=1)
-type_analize.to_excel('OUT/type_analize.xlsx')
+# type_analize.to_excel('OUT/type_analize.xlsx')
 
 
 w = pd.pivot_table(messages_df, columns='width',values ='id',aggfunc='count').transpose().reset_index()
 h = pd.pivot_table(messages_df, columns='height',values ='id',aggfunc='count').transpose().reset_index()
-print(f'Popular size: {int(h[h.id == h.id.max()].height.values[0])}x{int(w[w.id == w.id.max()].width.values[0])}')
+print(f'Popular image size: {int(h[h.id == h.id.max()].height.values[0])}x{int(w[w.id == w.id.max()].width.values[0])}')
 
 
 
 
 ##########################################################
-
-#messages = messages[['id', 'date', 'from','text']]
+# Message date analize
 messages = messages[['id', 'date', 'sender','text']]
 messages['date'] = pd.to_datetime(messages['date'])
 
@@ -69,8 +66,8 @@ print(f'''
 MIN DATE all message: {messages.date.min()}
 MAX DATE all message: {messages.date.max()}''')
 
-
-# Count
+##########################################################
+# Message count analize
 
 messages['day'] = messages['date'].apply(lambda x : x.date())
 
@@ -90,89 +87,76 @@ Anna mean message: {anna_mean} {round(anna_mean/(anna_mean+pavel_mean)*100,1)}%
 Pasha mean message: {pavel_mean} {round(pavel_mean/(anna_mean+pavel_mean)*100,1)}%''')
 
 
-
+##########################################################
+# Message day_parts analize
 piv_count_messages_date = pd.pivot_table(messages, index = 'date',columns = 'sender', values = 'id',aggfunc='count')
 piv_count_messages_date = piv_count_messages_date.reset_index()
 piv_count_messages_date['hour'] = piv_count_messages_date['date'].apply(lambda x : x.hour)
 
+day_parts = {   'morning' : [7,11],
+                'noon' : [12,16],
+                'evening' : [17,22],
+                'night' : [23,6]}
 
-utro = piv_count_messages_date[(piv_count_messages_date['hour'] >= 7) & (piv_count_messages_date['hour'] <= 11)]
-den = piv_count_messages_date[(piv_count_messages_date['hour'] >= 12) & (piv_count_messages_date['hour'] <= 16)]
-vecher = piv_count_messages_date[(piv_count_messages_date['hour'] >= 17) & (piv_count_messages_date['hour'] <= 22)]
-noch = piv_count_messages_date[(piv_count_messages_date['hour'] >= 23) | (piv_count_messages_date['hour'] <= 6)]
+
+morning = piv_count_messages_date[(piv_count_messages_date['hour'] >= day_parts['morning'][0])
+                            & (piv_count_messages_date['hour'] <= day_parts['morning'][1])]
+noon = piv_count_messages_date[(piv_count_messages_date['hour'] >= day_parts['noon'][0])
+                            & (piv_count_messages_date['hour'] <= day_parts['noon'][1])]
+evening = piv_count_messages_date[(piv_count_messages_date['hour'] >= day_parts['evening'][0])
+                            & (piv_count_messages_date['hour'] <= day_parts['evening'][1])]
+night = piv_count_messages_date[(piv_count_messages_date['hour'] >= day_parts['night'][0])
+                            | (piv_count_messages_date['hour'] <= day_parts['night'][1])]
 
 df_per_day = piv_count_messages_date[['hour','Anna','Pavel']].melt('hour', var_name='cols',  value_name='vals')
-df_per_day['time'] = df_per_day['hour'].apply(lambda x: 'morning' if x >= 7 and x <=11 
-                                                        else 'daytime' if x >=12 and x <=16
-                                                        else 'evening' if x >=17 and x <=22
-                                                        else 'night' if x >= 23 or x <= 6
-                                                        else 'lol')
-df_per_day1 = df_per_day.dropna()
+df_per_day['time'] = df_per_day['hour'].apply(lambda x: 'morning' if x >= day_parts['morning'][0] and x <=day_parts['morning'][1]
+                                                    else 'daytime' if x >= day_parts['noon'][0] and x <= day_parts['noon'][1]
+                                                    else 'evening' if x >= day_parts['evening'][0] and x <= day_parts['evening'][1]
+                                                    else 'night' if x >= day_parts['night'][0] or x <= day_parts['night'][1]
+                                                    else 'lol')
+df_per_day = df_per_day.dropna()
 f, ax = plt.subplots(figsize=(20, 10))
 sns.set(font_scale=1.3)
-per_day = sns.countplot(data = df_per_day1,
+per_day = sns.countplot(data = df_per_day,
             x = 'time',hue='cols',
             palette=["#ffb1c6",'#45c6ef'], orient ='h',
             )
-per_day.get_figure().savefig('OUT/per_day.png')
+# per_day.get_figure().savefig('OUT/per_day.png')
 
 
 
 
 
 
-
+##########################################################
+# Message years analize
 df = piv_count_messages_day[['day','Anna','Pavel']].melt('day', var_name='cols',  value_name='vals')
 df['year'] = df['day'].apply(lambda x : str(x)[:4])
 
-
-sns.set(style="whitegrid")
-sns.set(font_scale=1.2)
-fig, ax = plt.subplots()
-fig.set_size_inches(18.5, 10.5)
-y_2019 = sns.relplot(
-    data=df[df.year == '2019'],
-    x="day", y="vals", hue= 'cols',
-    kind="line",
-    palette=["#ffb1c6",'#45c6ef'],
-    height=5, aspect=2, linewidth = 3
-).set(
-    title="Stock Prices",
-    ylabel="count",
-    xlabel='date'
-)
-y_2019.fig.savefig('OUT/2019.png')
-
-y_2020 = sns.relplot(
-    data=df[df.year == '2020'],
-    x="day", y="vals", hue= 'cols',
-    kind="line",
-    palette=["#ffb1c6",'#45c6ef'],
-    height=5, aspect=2, linewidth = 3
-).set(
-    title="Stock Prices",
-    ylabel="count",
-    xlabel='date'
-)
-y_2020.fig.savefig('OUT/2020.png')
-
-y_2021 = sns.relplot(
-    data=df[df.year == '2021'],
-    x="day", y="vals", hue= 'cols',
-    kind="line",
-    palette=["#ffb1c6",'#45c6ef'],
-    height=5, aspect=2, linewidth = 3
-).set(
-    title="Stock Prices",
-    ylabel="count",
-    xlabel='date'
-)
-y_2021.fig.savefig('OUT/2021.png')
+for year in df.year.unique():
+    sns.set(style="whitegrid")
+    sns.set(font_scale=1.2)
+    fig, ax = plt.subplots()
+    fig.set_size_inches(18.5, 10.5)
+    year_stats = sns.relplot(
+        data=df[df.year == year],
+        x="day", y="vals", hue= 'cols',
+        kind="line",
+        palette=["#ffb1c6",'#45c6ef'],
+        height=5, aspect=2, linewidth = 3
+    ).set(
+        title="Stock Prices",
+        ylabel="count",
+        xlabel='date'
+    )
+    #year_stats.fig.savefig('OUT/2019.png')
 
 
 
 
+##########################################################
 # tags
+# TODO: Add TagSearch class
 tags = pd.read_excel(r'tags.xlsx')
 
 love_tags = tags[tags.name == 'love']['tags'].reset_index(drop=True)[0]
@@ -215,17 +199,12 @@ skuch_tags = skuch_tags.split(';')
 skuch_tags = '|'.join(skuch_tags)
 skuch_compile = re.compile(skuch_tags)
 
-
 mat_words = pd.read_excel(r'mat_tags.xlsx')
 mat_words = mat_words['tag'].to_list()
 mat_words.append('ебан')
-
 mat_tags = '|'.join(mat_words)
 mat_tags = re.compile(mat_tags)
-
-
-
-
+##########################################################
 
 messages['text'] = messages['text'].apply(str)
 messages['text'] = messages['text'].apply(str.lower)
@@ -239,8 +218,6 @@ messages['tnx'] = messages['text'].apply(lambda x: bool(tnx_compile.search(x)))
 messages['smile'] = messages['text'].apply(lambda x: bool(smile_compile.search(x)))
 messages['youtube'] = messages['text'].apply(lambda x: bool(youtube_compile.search(x)))
 messages['mat'] = messages['text'].apply(lambda x: bool(mat_tags.search(x)))
-
-
 
 messages[(messages.love) & (messages.sender == 'Pavel')].shape[0]
 messages[(messages.love) & (messages.sender == 'Anna')].shape[0]
@@ -262,11 +239,13 @@ piv_love['Pavel_proc'] = piv_love.apply(lambda x : 100 - x.Anna_proc ,axis=1)
 
 from tabulate import tabulate
 print(tabulate(piv_love, headers='keys', tablefmt='psql'))
-piv_love.to_excel(r'OUT/tags_search.xlsx')
+# piv_love.to_excel(r'OUT/tags_search.xlsx')
 
 
 
-#--------#
+##########################################################
+# WordCloud
+
 import nltk
 from PIL import Image
 from nltk.corpus import stopwords
